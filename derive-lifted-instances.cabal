@@ -1,0 +1,30 @@
+name:                derive-lifted-instances
+version:             0
+synopsis:            Derive class instances though various kinds of lifting
+description:         
+homepage:            https://github.com/sjoerdvisscher/derive-lifted-instances
+bug-reports:         https://github.com/sjoerdvisscher/derive-lifted-instances/issues
+license:             Apache-2.0
+license-file:        LICENSE
+author:              Sjoerd Visscher
+maintainer:          sjoerd@w3future.com
+category:            Data, Generics, Development
+build-type:          Simple
+cabal-version:       >= 2.0
+
+extra-source-files:
+  examples/*.hs
+  CHANGELOG
+
+library
+  exposed-modules:
+    Data.DeriveLiftedInstances
+    Data.DeriveLiftedInstances.Internal
+
+  build-depends:
+      base >= 4.10 && < 4.13
+    , template-haskell >= 2.12 && < 2.15
+
+source-repository head
+  type:     git
+  location: git://github.com/sjoerdvisscher/derive-lifted-instances.git
