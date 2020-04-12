@@ -17,10 +17,9 @@ import Data.Char (isAlpha)
 import Data.Maybe (fromMaybe, catMaybes)
 import Data.Traversable (for)
 
-
 data Derivator = Derivator {
   run :: Q Exp -> Q Exp,
-  op :: Name -> Q Exp,
+  op :: Name -> Q Exp -> Q Exp,
   ap :: Q Exp -> Q Exp -> Q Exp,
   arg :: Type -> Q Exp -> Q Exp,
   var :: Q Exp -> Q Exp,
@@ -33,10 +32,10 @@ varExp = return . VarE
 varPat :: Name -> Q Pat
 varPat = return . VarP
 
-noopDeriv :: Derivator
-noopDeriv = Derivator {
+idDeriv :: Derivator
+idDeriv = Derivator {
   run = id,
-  op = varExp,
+  op = const id,
   ap = \f a -> [|$f $a|],
   arg = const id,
   var = id,
@@ -62,7 +61,7 @@ deriveInstance' deriv ctx className typeName = do
         dec <- reify nm
         case dec of
           ClassOpI _ _ _ -> do
-            (args, rhs) <- buildOperation deriv tvn' tp (op deriv nm)
+            (args, rhs) <- buildOperation deriv tvn' tp (op deriv nm (varExp nm))
             body <- run deriv rhs
             return $ Just $ FunD nm [Clause args (NormalB body) []]
           _ -> fail $ "No support for " ++ show dec
@@ -113,7 +112,7 @@ showAp _ _ = error "Unexpected use of showAp"
 
 showDeriv :: Derivator
 showDeriv = noopDeriv {
-  op = \nm -> let name = nameBase nm in if isOperator name 
+  op = \nm _ -> let name = nameBase nm in if isOperator name 
     then do
       fx <- fromMaybe defaultFixity <$> reifyFixity nm
       [|ShowOp2 fx $ const $ showString $(return . LitE . StringL $ name)|]
@@ -121,10 +120,18 @@ showDeriv = noopDeriv {
   ap = \f a -> [|showAp $f $a|],
   arg = \t v -> do
     test <- isClassInstance ''Show t 
-    if test then [|ShowsPrec $ flip showsPrec $v|] else [|ShowsPrec $ const (showString "#Unshowable#") |],
+    if True then [|ShowsPrec $ flip showsPrec $v|] else [|ShowsPrec $ const (showString "#Unshowable#") |],
   var = \v -> [|ShowsPrec $ flip showsPrec $v|],
   over = \v -> [|ShowsPrec $ flip showsPrec $v|]
 } 
+
+newtype ShowsPrec1 a = ShowsPrec1 ShowsPrec
+instance Show (ShowsPrec1 a) where
+  showsPrec d (ShowsPrec1 s) = showsPrec d s
+show1Deriv :: Derivator
+show1Deriv = showDeriv {
+  run = \v -> [|ShowsPrec1 $v|]
+}
 
 isClassInstance :: Name -> Type -> Q Bool
 isClassInstance nm t = do
