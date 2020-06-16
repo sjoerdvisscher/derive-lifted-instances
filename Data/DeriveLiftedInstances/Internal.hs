@@ -1,26 +1,31 @@
+{-# LANGUAGE DeriveLift #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
-{-# LANGUAGE TemplateHaskell, RecordWildCards, DeriveLift, StandaloneDeriving #-}
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  Data.DeriveLiftedInstances.Internal
--- Copyright   :  (c) Sjoerd Visscher 2018
+-- Copyright   :  (c) Sjoerd Visscher 2020
 --
 -- Maintainer  :  sjoerd@w3future.com
 -- Stability   :  experimental
 -- Portability :  non-portable
 -----------------------------------------------------------------------------
 module Data.DeriveLiftedInstances.Internal where
-  
+
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax (Lift)
 import Data.Char (isAlpha)
 import Data.Maybe (fromMaybe, catMaybes)
 import Data.Traversable (for)
+import Data.Ratio
 
 
 data Derivator = Derivator {
   run :: Q Exp -> Q Exp,
-  op :: Name -> Q Exp,
+  op :: Name -> Q Exp -> Q Exp,
   ap :: Q Exp -> Q Exp -> Q Exp,
   arg :: Type -> Q Exp -> Q Exp,
   var :: Q Exp -> Q Exp,
@@ -35,11 +40,11 @@ varPat = return . VarP
 
 noopDeriv :: Derivator
 noopDeriv = Derivator {
-  run = id,
-  op = varExp,
-  ap = \f a -> [|$f $a|],
-  arg = const id,
-  var = id,
+  run  = id,
+  op   = const id,
+  ap   = \f a -> [| $f $a |],
+  arg  = const id,
+  var  = id,
   over = id
 }
 
@@ -51,23 +56,21 @@ deriveInstance deriv qtyp = do
       deriveInstance' deriv ctx className typeName
     AppT (ConT className) typeName ->
       deriveInstance' deriv [] className typeName
-    _ -> fail $ "No support for: " ++ show typ
+    _ -> fail $ "No support for type: " ++ show typ
 
 deriveInstance' :: Derivator -> Cxt -> Name -> Type -> Q [Dec]
 deriveInstance' deriv ctx className typeName = do
-  ClassI (ClassD _ _ _ _ decs) _ <- reify className
-  impl <- for decs $ \sig ->
-    case sig of
-      (SigD nm (ForallT _ [AppT _ (VarT tvn')] tp)) -> do
-        dec <- reify nm
-        case dec of
-          ClassOpI _ _ _ -> do
-            (args, rhs) <- buildOperation deriv tvn' tp (op deriv nm)
-            body <- run deriv rhs
-            return $ Just $ FunD nm [Clause args (NormalB body) []]
-          _ -> fail $ "No support for " ++ show dec
-      SigD{} -> fail $ "No support for " ++ show sig
-      _ -> return Nothing
+  ClassI (ClassD _ _ [KindedTV tvn _] _ decs) _ <- reify className
+  impl <- for decs $ \case
+    SigD nm tp -> do
+      dec <- reify nm
+      case dec of
+        ClassOpI{} -> do
+          (args, rhs) <- buildOperation deriv tvn tp (op deriv nm (varExp nm))
+          body <- run deriv rhs
+          return $ Just $ FunD nm [Clause args (NormalB body) []]
+        _ -> fail $ "No support for declaration: " ++ show dec
+    _ -> return Nothing
   return [InstanceD Nothing ctx (AppT (ConT className) typeName) $ catMaybes impl]
 
 buildOperation :: Derivator -> Name -> Type -> Q Exp -> Q ([Pat], Q Exp)
@@ -85,7 +88,7 @@ buildOperation d nm (AppT (AppT ArrowT h) t) e = do
   (args, rhs) <- buildOperation d nm t (ap d e (arg d h (varExp varNm)))
   return (VarP varNm : args, rhs)
 buildOperation d nm (ForallT _ _ t) e = buildOperation d nm t e
-buildOperation _ _ e _ = fail $ "No support for " ++ show e
+buildOperation _ _ e _ = fail $ "No support for expression: " ++ show e
 
 isVar :: Name -> Type -> Bool
 isVar nm (VarT nm') = nm == nm'
@@ -113,23 +116,19 @@ showAp _ _ = error "Unexpected use of showAp"
 
 showDeriv :: Derivator
 showDeriv = noopDeriv {
-  op = \nm -> let name = nameBase nm in if isOperator name 
+  op = \nm _ -> let name = nameBase nm in if isOperator name
     then do
       fx <- fromMaybe defaultFixity <$> reifyFixity nm
-      [|ShowOp2 fx $ const $ showString $(return . LitE . StringL $ name)|]
-    else [|ShowsPrec $ const $ showString $(return . LitE . StringL $ name)|],
-  ap = \f a -> [|showAp $f $a|],
-  arg = \t v -> do
-    test <- isClassInstance ''Show t 
-    if test then [|ShowsPrec $ flip showsPrec $v|] else [|ShowsPrec $ const (showString "#Unshowable#") |],
-  var = \v -> [|ShowsPrec $ flip showsPrec $v|],
-  over = \v -> [|ShowsPrec $ flip showsPrec $v|]
-} 
-
-isClassInstance :: Name -> Type -> Q Bool
-isClassInstance nm t = do
-  ClassI _ insts <- reify nm
-  return $ any (== t) [ t' | InstanceD _ _ (AppT _ t') _ <- insts]
+      [| ShowOp2 fx $ const $ showString $(pure . LitE . StringL $ name) |]
+    else
+      [| ShowsPrec  $ const $ showString $(pure . LitE . StringL $ name) |],
+  ap = \f a -> [| showAp $f $a |],
+  arg = \case
+    (VarT _) -> const [| ShowsPrec $ const (showString "#UnshowableVar#") |]
+    _ -> \v -> [| ShowsPrec $ flip showsPrec $v |],
+  var  = \v -> [| ShowsPrec $ flip showsPrec $v |],
+  over = \v -> [| ShowsPrec $ flip showsPrec $v |]
+}
 
 isOperator :: String -> Bool
 isOperator (c:_) = not (isAlpha c) && c /= '_'
