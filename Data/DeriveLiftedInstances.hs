@@ -13,36 +13,37 @@
 module Data.DeriveLiftedInstances (
   deriveInstance,
   Derivator(..),
-  noopDeriv,
+  idDeriv,
   apDeriv, tupleDeriv, newtypeDeriv, showDeriv, ShowsPrec(..)
 ) where
 
 import Language.Haskell.TH
 import Data.DeriveLiftedInstances.Internal
+import Control.Arrow ((&&&))
 
 
 apDeriv :: Derivator
-apDeriv = noopDeriv {
-  op   = \_ o -> [| pure $o |],     -- :: f op
-  arg  = \_ e -> [| pure $e |],     -- :: f e
-  ap   = \f a -> [| $f <*> $a |],   -- :: f (a -> b) -> f a -> f b
-  over = \v   -> [| sequenceA $v |] -- ::
+apDeriv = idDeriv {
+  op   = \_ o -> [| pure $o |],    -- :: f op
+  arg  = \_ e -> [| pure $e |],    -- :: f e
+  ap   = \f a -> [| $f <*> $a |],  -- :: f (a -> b) -> f a -> f b
+  over = \v   -> [| traverse $v |] -- :: (a -> f b) -> t a -> f (t b)
 }
 
 tupleDeriv :: Derivator
-tupleDeriv = noopDeriv {
+tupleDeriv = idDeriv {
   op   = \_ o   -> [| ($o, $o) |],                         -- :: (op, op)
   arg  = \_ e   -> [| ($e, $e) |],                         -- :: (e, e)
   ap   = \fg ab -> [| case ($fg, $ab) of
-                        ((f, g), (a, b)) -> (f a, g b) |], -- :: ((a -> c), (b -> d)) -> (a, b) -> (c, d)
-  over = \vv    -> [| (fmap fst $vv, fmap snd $vv) |]      -- :: t (a, b) -> (t a, t b)
+                        ((f, g), (a, b)) -> (f a, g b) |], -- :: (a -> c, b -> d) -> (a, b) -> (c, d)
+  over = \f     -> [| (fmap fst &&& fmap snd) . fmap $f |] -- :: (c -> (a, b)) -> t c -> (t a, t b)
 }
 
 newtypeDeriv :: Name -> Name -> Derivator
-newtypeDeriv (pure . ConE -> mk) (pure . VarE -> un) = noopDeriv {
-  run  = \e -> [| $mk $e |],     -- a -> N a
-  var  = \v -> [| $un $v |],     -- N a -> a
-  over = \v -> [| fmap $un $v |] -- t (N a) -> t a
+newtypeDeriv (pure . ConE -> mk) (pure . VarE -> un) = idDeriv {
+  run  = \e -> [| $mk $e |], -- a -> N a
+  var  = un,                 -- N a -> a
+  over = \v -> [| fmap $v |] -- (b -> a) -> f b -> f a, where b = a, N a, N (N a) etc
 }
 
 deriveInstance showDeriv [t| Bounded ShowsPrec |]

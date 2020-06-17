@@ -28,7 +28,7 @@ data Derivator = Derivator {
   op :: Name -> Q Exp -> Q Exp,
   ap :: Q Exp -> Q Exp -> Q Exp,
   arg :: Type -> Q Exp -> Q Exp,
-  var :: Q Exp -> Q Exp,
+  var :: Q Exp,
   over :: Q Exp -> Q Exp
 }
 
@@ -38,14 +38,14 @@ varExp = return . VarE
 varPat :: Name -> Q Pat
 varPat = return . VarP
 
-noopDeriv :: Derivator
-noopDeriv = Derivator {
+idDeriv :: Derivator
+idDeriv = Derivator {
   run  = id,
   op   = const id,
   ap   = \f a -> [| $f $a |],
   arg  = const id,
-  var  = id,
-  over = id
+  var  = [| id |],
+  over = \v -> [| fmap $v |]
 }
 
 deriveInstance :: Derivator -> Q Type -> Q [Dec]
@@ -74,26 +74,31 @@ deriveInstance' deriv ctx className typeName = do
   return [InstanceD Nothing ctx (AppT (ConT className) typeName) $ catMaybes impl]
 
 buildOperation :: Derivator -> Name -> Type -> Q Exp -> Q ([Pat], Q Exp)
-buildOperation _ nm t e | isVar nm t = return ([], e)
-buildOperation d nm (AppT (AppT ArrowT (AppT _ h)) t) e | isVar nm h = do
-  varNm <- newName "fvar"
-  (args, rhs) <- buildOperation d nm t (ap d e (over d (varExp varNm)))
-  return (VarP varNm : args, rhs)
-buildOperation d nm (AppT (AppT ArrowT h) t) e | isVar nm h = do
+buildOperation d nm (AppT (AppT ArrowT h) t) e | hasVar nm h = do
   varNm <- newName "var"
-  (args, rhs) <- buildOperation d nm t (ap d e (var d (varExp varNm)))
+  (args, rhs) <- buildOperation d nm t (ap d e [| $(buildArgument d nm h) $(varExp varNm) |])
   return (VarP varNm : args, rhs)
 buildOperation d nm (AppT (AppT ArrowT h) t) e = do
   varNm <- newName "arg"
   (args, rhs) <- buildOperation d nm t (ap d e (arg d h (varExp varNm)))
   return (VarP varNm : args, rhs)
 buildOperation d nm (ForallT _ _ t) e = buildOperation d nm t e
+buildOperation _ nm t e | isVar nm t = return ([], e)
 buildOperation _ _ e _ = fail $ "No support for expression: " ++ show e
+
+buildArgument :: Derivator -> Name -> Type -> Q Exp
+buildArgument d nm (AppT _ h) = over d (buildArgument d nm h)
+buildArgument d nm _ = var d
 
 isVar :: Name -> Type -> Bool
 isVar nm (VarT nm') = nm == nm'
 isVar nm (AppT h _) = isVar nm h
 isVar _ _ = False
+
+hasVar :: Name -> Type -> Bool
+hasVar nm (VarT nm') = nm == nm'
+hasVar nm (AppT _ h) = hasVar nm h
+hasVar _ _ = False
 
 tvName :: TyVarBndr -> Name
 tvName (PlainTV nm) = nm
@@ -115,7 +120,7 @@ showAp (ShowOp1 (Fixity p i) f) (ShowsPrec g) = ShowsPrec $ \d -> showParen (d >
 showAp _ _ = error "Unexpected use of showAp"
 
 showDeriv :: Derivator
-showDeriv = noopDeriv {
+showDeriv = idDeriv {
   op = \nm _ -> let name = nameBase nm in if isOperator name
     then do
       fx <- fromMaybe defaultFixity <$> reifyFixity nm
@@ -126,8 +131,8 @@ showDeriv = noopDeriv {
   arg = \case
     (VarT _) -> const [| ShowsPrec $ const (showString "#UnshowableVar#") |]
     _ -> \v -> [| ShowsPrec $ flip showsPrec $v |],
-  var  = \v -> [| ShowsPrec $ flip showsPrec $v |],
-  over = \v -> [| ShowsPrec $ flip showsPrec $v |]
+  var  = [| ShowsPrec . flip showsPrec |],
+  over = const [| ShowsPrec . flip showsPrec |]
 }
 
 isOperator :: String -> Bool
