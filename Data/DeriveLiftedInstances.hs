@@ -19,25 +19,30 @@ module Data.DeriveLiftedInstances (
 
 import Language.Haskell.TH
 import Data.DeriveLiftedInstances.Internal
-import Control.Arrow ((&&&))
+import Control.Arrow ((&&&), (***))
 import Control.Applicative (liftA2)
 
 
 apDeriv :: Derivator -> Derivator
 apDeriv deriv = deriv {
   run = [| fmap $(run deriv) |],
-  op  = \nm o -> [| pure $(op deriv nm o) |],    -- :: f op
-  arg = \ty e -> [| pure $(arg deriv ty e) |],    -- :: f e
-  ap  = \app -> [| liftA2 $(ap deriv app) |], -- :: (c -> a -> b) -> f c -> f a -> f b
-  var = \fold -> [| fmap $(var deriv fold) . $(fold (\v -> [| traverse $v |]) [| id |]) |] -- :: (a -> f b) -> t a -> f (t b)
+  op  = \nm o -> [| pure $(op deriv nm o) |],
+  arg = \ty e -> [| pure $(arg deriv ty e) |],
+  ap  = \app -> [| liftA2 $(ap deriv app) |],
+  var = \fold ->
+    [| fmap $(var deriv fold) .
+       $(fold (\v -> [| traverse $v |]) [| id |]) |]
 }
 
-tupleDeriv :: Derivator
-tupleDeriv = idDeriv {
-  op  = \_ o   -> [| ($o, $o) |],                         -- :: (op, op)
-  arg = \_ e   -> [| ($e, $e) |],                         -- :: (e, e)
-  ap  = \app -> [| \(f, g) (a, b) -> ($app f a, $app g b) |], -- :: (c -> a -> b) -> (c, c') -> (a, a') -> (b, b')
-  var = \fold -> fold (\f -> [| (fmap fst &&& fmap snd) . fmap $f |]) [| id |] -- :: (c -> (a, b)) -> t c -> (t a, t b)
+tupleDeriv :: Derivator -> Derivator -> Derivator
+tupleDeriv l r = idDeriv {
+  run = [| $(run l) *** $(run r) |],
+  op  = \nm o -> [| ($(op l nm o), $(op r nm o)) |],                         -- :: (op, op)
+  arg = \ty e -> [| ($(arg l ty e), $(arg r ty e)) |],                         -- :: (e, e)
+  ap  = \app  -> [| \(f, g) (a, b) -> ($(ap l app) f a, $(ap r app) g b) |], -- :: (c -> a -> b) -> (c, c') -> (a, a') -> (b, b')
+  var = \fold ->
+    [| ($(var l fold) *** $(var r fold)) .
+       $(fold (\f -> [| (fmap fst &&& fmap snd) . fmap $f |]) [| id |]) |] -- :: (c -> (a, b)) -> t c -> (t a, t b)
 }
 
 newtypeDeriv :: Name -> Name -> Derivator -> Derivator
