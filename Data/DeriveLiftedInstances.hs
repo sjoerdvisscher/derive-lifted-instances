@@ -14,7 +14,7 @@ module Data.DeriveLiftedInstances (
   deriveInstance,
   Derivator(..),
   idDeriv,
-  apDeriv, tupleDeriv, newtypeDeriv, showDeriv, ShowsPrec(..)
+  apDeriv, tupleDeriv, newtypeDeriv, isoDeriv, showDeriv, ShowsPrec(..)
 ) where
 
 import Language.Haskell.TH
@@ -25,30 +25,33 @@ import Control.Applicative (liftA2)
 
 apDeriv :: Derivator -> Derivator
 apDeriv deriv = deriv {
-  run = [| fmap $(run deriv) |],
+  run = \v -> [| fmap (\w -> $(run deriv [| w |])) $v |],
   op  = \nm o -> [| pure $(op deriv nm o) |],
   arg = \ty e -> [| pure $(arg deriv ty e) |],
   ap  = \app -> [| liftA2 $(ap deriv app) |],
-  var = \fold ->
-    [| fmap $(var deriv fold) .
-       $(fold (\v -> [| traverse $v |]) [| id |]) |]
+  var = \fold v ->
+    [| fmap (\w -> $(var deriv fold [| w |])) ($(fold (\w -> [| traverse $w |]) [| id |]) $v) |]
 }
 
 tupleDeriv :: Derivator -> Derivator -> Derivator
 tupleDeriv l r = idDeriv {
-  run = [| $(run l) *** $(run r) |],
-  op  = \nm o -> [| ($(op l nm o), $(op r nm o)) |],                         -- :: (op, op)
-  arg = \ty e -> [| ($(arg l ty e), $(arg r ty e)) |],                         -- :: (e, e)
-  ap  = \app  -> [| \(f, g) (a, b) -> ($(ap l app) f a, $(ap r app) g b) |], -- :: (c -> a -> b) -> (c, c') -> (a, a') -> (b, b')
-  var = \fold ->
-    [| ($(var l fold) *** $(var r fold)) .
-       $(fold (\f -> [| (fmap fst &&& fmap snd) . fmap $f |]) [| id |]) |] -- :: (c -> (a, b)) -> t c -> (t a, t b)
+  run = \e -> [| ((\w -> $(run l [| w |])) *** (\w -> $(run r [| w |]))) $e |],
+  op  = \nm o -> [| ($(op l nm o), $(op r nm o)) |],
+  arg = \ty e -> [| ($(arg l ty e), $(arg r ty e)) |],
+  ap  = \app  -> [| \(f, g) (a, b) -> ($(ap l app) f a, $(ap r app) g b) |],
+  var = \fold v ->
+    [| ( $(var l fold [| $(fold (\w -> [| fmap $w |]) [| fst |]) $v |])
+       , $(var r fold [| $(fold (\w -> [| fmap $w |]) [| snd |]) $v |])
+       ) |]
 }
 
 newtypeDeriv :: Name -> Name -> Derivator -> Derivator
-newtypeDeriv (pure . ConE -> mk) (pure . VarE -> un) deriv = deriv {
-  run = [| $mk . $(run deriv) |], -- a -> N a
-  var = \fold -> [| $(var deriv fold) . $(fold (\v -> [| fmap $v |]) un) |] -- (b -> a) -> f b -> f a, where b = a, f a, f (g a) etc
+newtypeDeriv mk un = isoDeriv (pure $ ConE mk) (pure $ VarE un)
+
+isoDeriv :: Q Exp -> Q Exp -> Derivator -> Derivator
+isoDeriv mk un deriv = deriv {
+  run = \v -> [| $mk $(run deriv v) |],
+  var = \fold v -> var deriv fold [| $(fold (\v -> [| fmap $v |]) un) $v |]
 }
 
 deriveInstance showDeriv [t| Bounded ShowsPrec |]

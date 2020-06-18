@@ -23,11 +23,11 @@ import Data.Traversable (for)
 
 
 data Derivator = Derivator {
-  run :: Q Exp,
+  run :: Q Exp -> Q Exp,
   op :: Name -> Q Exp -> Q Exp,
   arg :: Type -> Q Exp -> Q Exp,
   ap :: Q Exp -> Q Exp,
-  var :: ((Q Exp -> Q Exp) -> Q Exp -> Q Exp) -> Q Exp
+  var :: ((Q Exp -> Q Exp) -> Q Exp -> Q Exp) -> Q Exp -> Q Exp
 }
 
 varExp :: Name -> Q Exp
@@ -38,11 +38,11 @@ varPat = return . VarP
 
 idDeriv :: Derivator
 idDeriv = Derivator {
-  run  = [| id |],
+  run  = id,
   op   = const id,
   arg  = const id,
-  ap   = id,
-  var  = const [| id |]
+  var  = const id,
+  ap   = id
 }
 
 deriveInstance :: Derivator -> Q Type -> Q [Dec]
@@ -64,7 +64,7 @@ deriveInstance' deriv ctx className typeName = do
       case dec of
         ClassOpI{} -> do
           (args, rhs) <- buildOperation deriv tvn tp (op deriv nm (varExp nm))
-          body <- [| $(run deriv) $(rhs) |]
+          body <- run deriv rhs
           return $ Just $ FunD nm [Clause args (NormalB body) []]
         _ -> fail $ "No support for declaration: " ++ show dec
     _ -> return Nothing
@@ -73,7 +73,7 @@ deriveInstance' deriv ctx className typeName = do
 buildOperation :: Derivator -> Name -> Type -> Q Exp -> Q ([Pat], Q Exp)
 buildOperation d nm (AppT (AppT ArrowT h) t) e | hasVar nm h = do
   varNm <- newName "var"
-  (args, rhs) <- buildOperation d nm t [| $(ap d [| id |]) $e ($(var d (buildArgument h)) $(varExp varNm)) |]
+  (args, rhs) <- buildOperation d nm t [| $(ap d [| id |]) $e $(var d (buildArgument nm h) (varExp varNm)) |]
   return (VarP varNm : args, rhs)
 buildOperation d nm (AppT (AppT ArrowT h) t) e = do
   varNm <- newName "arg"
@@ -83,9 +83,10 @@ buildOperation d nm (ForallT _ _ t) e = buildOperation d nm t e
 buildOperation _ nm t e | isVar nm t = return ([], e)
 buildOperation _ _ e _ = fail $ "No support for expression: " ++ show e
 
-buildArgument :: Type -> (Q Exp -> Q Exp) -> Q Exp -> Q Exp
-buildArgument (AppT _ h) over var = over (buildArgument h over var)
-buildArgument _ _ var = var
+buildArgument :: Name -> Type -> (Q Exp -> Q Exp) -> Q Exp -> Q Exp
+buildArgument nm (AppT h _) _ var | isVar nm h = var
+buildArgument nm (AppT _ h) over var = over (buildArgument nm h over var)
+buildArgument _ _ _ var = var
 
 isVar :: Name -> Type -> Bool
 isVar nm (VarT nm') = nm == nm'
@@ -125,10 +126,10 @@ showDeriv = idDeriv {
     else
       [| ShowsPrec  $ const $ showString $(pure . LitE . StringL $ name) |],
   arg = \case
-    (VarT _) -> const [| ShowsPrec $ const (showString "#UnshowableVar#") |]
+    (VarT _) -> const [| ShowsPrec $ const (showString "#Unshowable#") |]
     _ -> \v -> [| ShowsPrec $ flip showsPrec $v |],
-  ap  = const [| showAp |],
-  var = const [| ShowsPrec . flip showsPrec |]
+  var = \_ v ->  [| ShowsPrec $ flip showsPrec $v |],
+  ap  = const [| showAp |]
 }
 
 isOperator :: String -> Bool
