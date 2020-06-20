@@ -11,47 +11,103 @@
 -- Portability :  non-portable
 -----------------------------------------------------------------------------
 module Data.DeriveLiftedInstances (
+  -- * Deriving instances
   deriveInstance,
-  Derivator(..),
-  idDeriv,
-  apDeriv, tupleDeriv, newtypeDeriv, isoDeriv, showDeriv, ShowsPrec(..)
+  -- * Derivators for any class
+  idDeriv, newtypeDeriv, isoDeriv,
+  -- * Derivators for algebraic classes
+  -- $algebraic-classes
+  apDeriv, tupleDeriv, unitDeriv,
+  showDeriv, ShowsPrec(..),
+  -- * Creating derivators
+  Derivator(..)
 ) where
 
 import Language.Haskell.TH
 import Data.DeriveLiftedInstances.Internal
-import Control.Arrow ((&&&), (***))
+import Control.Arrow ((***))
 import Control.Applicative (liftA2)
 
+-- $algebraic-classes
+-- Algebraic classes are type classes where all the methods return a value of the same type, which is also the class parameter.
+-- Examples from base are `Num` and `Monoid`.
 
+-- | Given how to derive an instance for @a@, `apDeriv` creates a `Derivator` for @f a@,
+-- when @f@ is an instance of `Applicative`. Example:
+--
+-- @
+-- `deriveInstance` (`apDeriv` `idDeriv`) [t| forall a. `Num` a => `Num` [a] |]
+--
+-- > [2, 3] `*` [5, 10]
+-- [10, 20, 15, 30]
+-- @
 apDeriv :: Derivator -> Derivator
 apDeriv deriv = deriv {
-  run = \v -> [| fmap (\w -> $(run deriv [| w |])) $v |],
+  res = \v -> [| fmap (\w -> $(res deriv [| w |])) $v |],
   op  = \nm o -> [| pure $(op deriv nm o) |],
   arg = \ty e -> [| pure $(arg deriv ty e) |],
-  ap  = \app -> [| liftA2 $(ap deriv app) |],
   var = \fold v ->
-    [| fmap (\w -> $(var deriv fold [| w |])) ($(fold (\w -> [| traverse $w |]) [| id |]) $v) |]
+    [| fmap (\w -> $(var deriv fold [| w |])) ($(fold [| traverse |] [| id |]) $v) |],
+  ap  = \f a -> [| liftA2 (\g b -> $(ap deriv [| g |] [| b |])) $f $a |]
 }
 
+-- | Given how to derive an instance for @a@ and @b@, `tupleDeriv` creates a `Derivator` for @(a, b)@.
+--
+-- @
+-- `deriveInstance` (`tupleDeriv` `idDeriv` `idDeriv`) [t| forall a b. (`Num` a, `Num` b) => `Num` (a, b) |]
+--
+-- > (2, 3) `*` (5, 10)
+-- (10, 30)
+-- @
 tupleDeriv :: Derivator -> Derivator -> Derivator
 tupleDeriv l r = idDeriv {
-  run = \e -> [| ((\w -> $(run l [| w |])) *** (\w -> $(run r [| w |]))) $e |],
+  res = \e -> [| ((\w -> $(res l [| w |])) *** (\w -> $(res r [| w |]))) $e |],
   op  = \nm o -> [| ($(op l nm o), $(op r nm o)) |],
   arg = \ty e -> [| ($(arg l ty e), $(arg r ty e)) |],
-  ap  = \app  -> [| \(f, g) (a, b) -> ($(ap l app) f a, $(ap r app) g b) |],
   var = \fold v ->
-    [| ( $(var l fold [| $(fold (\w -> [| fmap $w |]) [| fst |]) $v |])
-       , $(var r fold [| $(fold (\w -> [| fmap $w |]) [| snd |]) $v |])
-       ) |]
+    [| ( $(var l fold [| $(fold [| fmap |] [| fst |]) $v |])
+       , $(var r fold [| $(fold [| fmap |] [| snd |]) $v |])
+       ) |],
+  ap  = \f a  -> [| case ($f, $a) of ((g, h), (b, c)) -> ($(ap l [| g |] [| b |]), $(ap r [| h |] [| c |])) |]
 }
 
+-- | A `Derivator` for @()@.
+unitDeriv :: Derivator
+unitDeriv = idDeriv {
+  op = \_ _ -> [| () |],
+  ap = const
+}
+
+-- | Given how to derive an instance for @a@, and the names of a newtype wrapper around @a@,
+-- `newtypeDeriv` creates a `Derivator` for that newtype. Example:
+--
+-- @
+-- newtype Ap f a = Ap { getAp :: f a } deriving Show
+-- `deriveInstance` (`newtypeDeriv` 'Ap 'getAp `idDeriv`) [t| forall f. `Functor` f => `Functor` (Ap f) |]
+--
+-- > `fmap` (+1) (Ap [1,2,3])
+-- Ap {getAp = [2,3,4]}
+-- @
 newtypeDeriv :: Name -> Name -> Derivator -> Derivator
 newtypeDeriv mk un = isoDeriv (pure $ ConE mk) (pure $ VarE un)
 
+-- | Given how to derive an instance for @a@, and two functions of type @a `->` b@ and @b `->` a@,
+-- `isoDeriv` creates a `Derivator` for @b@. (Note that the 2 functions don't have to form
+-- an isomorphism, but if they don't, the new instance can break the class laws.) Example:
+--
+-- @
+-- newtype X = X { unX :: `Int` } deriving `Show`
+-- mkX :: `Int` -> X
+-- mkX i = X (`mod` i 10)
+-- `deriveInstance` (isoDeriv [| mkX |] [| unX |] `idDeriv`) [t| `Num` X |]
+--
+-- > mkX 4 `^` 2
+-- X {unX = 6}
+-- @
 isoDeriv :: Q Exp -> Q Exp -> Derivator -> Derivator
 isoDeriv mk un deriv = deriv {
-  run = \v -> [| $mk $(run deriv v) |],
-  var = \fold v -> var deriv fold [| $(fold (\v -> [| fmap $v |]) un) $v |]
+  res = \v -> [| $mk $(res deriv v) |],
+  var = \fold v -> var deriv fold [| $(fold [| fmap |] un) $v |]
 }
 
 deriveInstance showDeriv [t| Bounded ShowsPrec |]
