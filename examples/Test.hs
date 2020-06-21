@@ -19,15 +19,16 @@ instance Test Int where
 newtype X = X { unX :: Int } deriving Show
 mkX :: Int -> X
 mkX = X . (`mod` 10)
+deriveInstance (isoDeriv [| mkX |] [| unX |] idDeriv) [t| Num X |]
+
 deriveInstance (isoDeriv [| mkX |] [| unX |] idDeriv) [t| Test X |]
 deriveInstance (isoDeriv [| mkX |] [| unX |] idDeriv) [t| Eq X |]
 deriveInstance (isoDeriv [| mkX |] [| unX |] idDeriv) [t| Ord X |]
-deriveInstance (isoDeriv [| mkX |] [| unX |] idDeriv) [t| Num X |]
 
 deriveInstance showDeriv [t| Test ShowsPrec |]
 deriveInstance unitDeriv [t| Test () |]
 deriveInstance (apDeriv idDeriv) [t| forall a. Test a => Test [a] |]
-deriveInstance (tupleDeriv idDeriv idDeriv) [t| forall a b. (Test a, Test b) => Test (a, b) |]
+deriveInstance (biapDeriv idDeriv idDeriv) [t| forall a b. (Test a, Test b) => Test (a, b) |]
 -- deriveInstance (newtypeDeriv 'Identity 'runIdentity idDeriv) [t| forall a. Test a => Test (Identity a) |]
 
 newtype Ap f a = Ap { getAp :: f a } deriving Show
@@ -37,8 +38,8 @@ deriveInstance (newtypeDeriv 'Identity 'runIdentity (newtypeDeriv 'Ap 'getAp (ap
 
 newtype Id a = Id { runId :: a }
 deriveInstance (apDeriv (apDeriv (newtypeDeriv 'Id 'runId idDeriv))) [t| forall a. Test a => Test (() -> Identity (Id a)) |]
-deriveInstance (apDeriv (tupleDeriv idDeriv idDeriv)) [t| forall a b. (Test a, Test b) => Test (() -> (a, b)) |]
-deriveInstance (tupleDeriv (apDeriv idDeriv) (newtypeDeriv 'Id 'runId idDeriv)) [t| forall a b. (Test a, Test b) => Test (() -> a, Id b) |]
+deriveInstance (apDeriv (biapDeriv idDeriv idDeriv)) [t| forall a b. (Test a, Test b) => Test (() -> (a, b)) |]
+deriveInstance (biapDeriv (apDeriv idDeriv) (newtypeDeriv 'Id 'runId idDeriv)) [t| forall a b. (Test a, Test b) => Test (() -> a, Id b) |]
 
 class Test1 f where
   hop0 :: f a

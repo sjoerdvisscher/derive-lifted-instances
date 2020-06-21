@@ -17,7 +17,7 @@ module Data.DeriveLiftedInstances (
   idDeriv, newtypeDeriv, isoDeriv,
   -- * Derivators for algebraic classes
   -- $algebraic-classes
-  apDeriv, tupleDeriv, unitDeriv,
+  apDeriv, biapDeriv, unitDeriv,
   showDeriv, ShowsPrec(..),
   -- * Creating derivators
   Derivator(..)
@@ -25,8 +25,8 @@ module Data.DeriveLiftedInstances (
 
 import Language.Haskell.TH
 import Data.DeriveLiftedInstances.Internal
-import Control.Arrow ((***))
 import Control.Applicative (liftA2)
+import Data.Biapplicative
 
 -- $algebraic-classes
 -- Algebraic classes are type classes where all the methods return a value of the same type, which is also the class parameter.
@@ -51,24 +51,24 @@ apDeriv deriv = deriv {
   ap  = \f a -> [| liftA2 (\g b -> $(ap deriv [| g |] [| b |])) $f $a |]
 }
 
--- | Given how to derive an instance for @a@ and @b@, `tupleDeriv` creates a `Derivator` for @(a, b)@.
+-- | Given how to derive an instance for @a@ and @b@, `biapDeriv` creates a `Derivator` for @f a b@,
+-- when @f@ is an instance of `Biapplicative`. Example:
 --
 -- @
--- `deriveInstance` (`tupleDeriv` `idDeriv` `idDeriv`) [t| forall a b. (`Num` a, `Num` b) => `Num` (a, b) |]
+-- `deriveInstance` (`biapDeriv` `idDeriv` `idDeriv`) [t| forall a b. (`Num` a, `Num` b) => `Num` (a, b) |]
 --
 -- > (2, 3) `*` (5, 10)
 -- (10, 30)
 -- @
-tupleDeriv :: Derivator -> Derivator -> Derivator
-tupleDeriv l r = idDeriv {
-  res = \e -> [| ((\w -> $(res l [| w |])) *** (\w -> $(res r [| w |]))) $e |],
-  op  = \nm o -> [| ($(op l nm o), $(op r nm o)) |],
-  arg = \ty e -> [| ($(arg l ty e), $(arg r ty e)) |],
+biapDeriv :: Derivator -> Derivator -> Derivator
+biapDeriv l r = Derivator {
+  res = \e -> [| bimap (\w -> $(res l [| w |])) (\w -> $(res r [| w |])) $e |],
+  op  = \nm o -> [| bipure $(op l nm o) $(op r nm o) |],
+  arg = \ty e -> [| bipure $(arg l ty e) $(arg r ty e) |],
   var = \fold v ->
-    [| ( $(var l fold [| $(fold [| fmap |] [| fst |]) $v |])
-       , $(var r fold [| $(fold [| fmap |] [| snd |]) $v |])
-       ) |],
-  ap  = \f a  -> [| case ($f, $a) of ((g, h), (b, c)) -> ($(ap l [| g |] [| b |]), $(ap r [| h |] [| c |])) |]
+    [| bimap (\w -> $(var l fold [| w |])) (\w -> $(var r fold [| w |]))
+       ($(fold [| traverseBia |] [| id |]) $v) |],
+  ap  = \f a -> [| biliftA2 (\g b -> $(ap l [| g |] [| b |])) (\g b -> $(ap r [| g |] [| b |])) $f $a |]
 }
 
 -- | A `Derivator` for @()@.
