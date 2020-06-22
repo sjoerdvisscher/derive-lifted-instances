@@ -26,10 +26,12 @@ deriveInstance (isoDeriv [| mkX |] [| unX |] idDeriv) [t| Eq X |]
 deriveInstance (isoDeriv [| mkX |] [| unX |] idDeriv) [t| Ord X |]
 
 deriveInstance showDeriv [t| Test ShowsPrec |]
-deriveInstance unitDeriv [t| Test () |]
+deriveInstance monoidDeriv [t| Test () |]
 deriveInstance (apDeriv idDeriv) [t| forall a. Test a => Test [a] |]
 deriveInstance (biapDeriv idDeriv idDeriv) [t| forall a b. (Test a, Test b) => Test (a, b) |]
 -- deriveInstance (newtypeDeriv 'Identity 'runIdentity idDeriv) [t| forall a. Test a => Test (Identity a) |]
+
+deriveInstance (apDeriv monoidDeriv) [t| forall a. Monoid a => Test (IO a) |]
 
 newtype Ap f a = Ap { getAp :: f a } deriving Show
 deriveInstance (newtypeDeriv 'Ap 'getAp (apDeriv idDeriv)) [t| forall f a. (Applicative f, Test a) => Test (Ap f a) |]
