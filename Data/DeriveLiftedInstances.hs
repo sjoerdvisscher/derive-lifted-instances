@@ -17,7 +17,7 @@ module Data.DeriveLiftedInstances (
   idDeriv, newtypeDeriv, isoDeriv,
   -- * Derivators for algebraic classes
   -- $algebraic-classes
-  apDeriv, biapDeriv, monoidDeriv,
+  recordDeriv, apDeriv, biapDeriv, monoidDeriv,
   showDeriv, ShowsPrec(..),
   -- * Creating derivators
   Derivator(..)
@@ -26,6 +26,7 @@ module Data.DeriveLiftedInstances (
 import Language.Haskell.TH
 import Data.DeriveLiftedInstances.Internal
 import Control.Applicative (liftA2)
+import Control.Monad (zipWithM)
 import Data.Biapplicative
 
 -- $algebraic-classes
@@ -112,6 +113,55 @@ isoDeriv mk un deriv = deriv {
   res = \v -> [| $mk $(res deriv v) |],
   var = \fold v -> var deriv fold [| $(fold [| fmap |] un) $v |]
 }
+
+-- | Given an n-ary function to @a@, and a list of pairs, consisting of a function from @a@ and a
+-- `Derivator` for the codomain of that function, create a `Derivator` for @a@. Examples:
+--
+-- @
+-- data Rec f = Rec { getUnit :: f (), getInt :: f Int }
+-- deriveInstance
+--   (recordDeriv [| Rec |]
+--     [ ([| getUnit |], apDeriv monoidDeriv)
+--     , ([| getInt  |], apDeriv idDeriv)
+--     ])
+--   [t| forall f. Applicative f => Test (Rec f) |]
+-- @
+--
+-- @
+-- tripleDeriv deriv1 deriv2 deriv3 =
+--   recordDeriv [| (,,) |]
+--     [ ([| fst3 |], deriv1)
+--     , ([| snd3 |], deriv2)
+--     , ([| thd3 |], deriv3) ]
+-- @
+recordDeriv :: Q Exp -> [(Q Exp, Derivator)] -> Derivator
+recordDeriv mk flds = Derivator {
+  res = \vs -> do vnms <- vars; [| case $vs of $(pat vnms) -> $(exps vnms >>= foldl (\f v -> [| $f $(pure v) |]) mk) |],
+  op  = \nm o -> tup $ traverse (\(_, d) -> op d nm o) flds,
+  arg = \ty e -> tup $ traverse (\(_, d) -> arg d ty e) flds,
+  var = \fold v -> tup $ traverse (\(fld, d) -> var d fold [| $(fold [| fmap |] fld) $v |]) flds,
+  ap  = \fs as -> do
+    fnms <- funs
+    vnms <- vars
+    [| case ($fs, $as) of ($(pat fnms), $(pat vnms)) -> $(tup $ zipWithM (\(_, d) (f, v) -> ap d (ex f) (ex v)) flds (zip fnms vnms)) |]
+}
+  where
+    tup :: Q [Exp] -> Q Exp
+    tup = fmap (TupE . fmap Just)
+    pat :: [Name] -> Q Pat
+    pat = pure . TupP . fmap VarP
+    ex :: Name -> Q Exp
+    ex = pure . VarE
+    exps :: [Name] -> Q [Exp]
+    exps = traverse ex
+    vars :: Q [Name]
+    vars = names "a"
+    funs :: Q [Name]
+    funs = names "f"
+    names :: String -> Q [Name]
+    names s = traverse (const (newName s)) flds
+
+
 
 deriveInstance showDeriv [t| Bounded ShowsPrec |]
 deriveInstance showDeriv [t| Num ShowsPrec |]

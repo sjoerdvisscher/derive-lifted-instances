@@ -3,7 +3,7 @@ Changelog
 
 v0.1 2020-06-22
 ---------------
-  - Generalize `tupleDeriv` to `biapDeriv`
+  - Generalize `tupleDeriv` to `biapDeriv` and `recordDeriv`
   - Generalize `unitDeriv` to `monoidDeriv`
 
 v0 2020-06-20

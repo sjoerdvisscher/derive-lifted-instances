@@ -1,3 +1,5 @@
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -16,11 +18,16 @@ instance Test Int where
   op1 i is = i + sum is
   op2 = sum . fmap sum
 
+data Rec f = Rec { getUnit :: f (), getInt :: f Int }
+deriveInstance (recordDeriv [| Rec |]
+    [ ([| getUnit |], apDeriv monoidDeriv)
+    , ([| getInt |], apDeriv idDeriv)
+    ]) [t| forall f. Applicative f => Test (Rec f) |]
+
 newtype X = X { unX :: Int } deriving Show
 mkX :: Int -> X
 mkX = X . (`mod` 10)
 deriveInstance (isoDeriv [| mkX |] [| unX |] idDeriv) [t| Num X |]
-
 deriveInstance (isoDeriv [| mkX |] [| unX |] idDeriv) [t| Test X |]
 deriveInstance (isoDeriv [| mkX |] [| unX |] idDeriv) [t| Eq X |]
 deriveInstance (isoDeriv [| mkX |] [| unX |] idDeriv) [t| Ord X |]
@@ -57,3 +64,20 @@ deriveInstance (newtypeDeriv 'Ap 'getAp idDeriv) [t| forall f. Test1 f => Test1 
 deriveInstance (newtypeDeriv 'Ap 'getAp idDeriv) [t| forall f. Functor f => Functor (Ap f) |]
 deriveInstance (newtypeDeriv 'Ap 'getAp idDeriv) [t| forall f. Applicative f => Applicative (Ap f) |]
 deriveInstance (newtypeDeriv 'Ap 'getAp idDeriv) [t| forall f. Monad f => Monad (Ap f) |]
+
+class Cotest a where
+  co0 :: a -> Int
+  co1 :: Int -> a -> a
+  co2 :: a -> [[a]]
+
+instance (Cotest a, Cotest b) => Cotest (Either a b) where
+  co0 a = either co0 co0 a
+  co1 i a = either (Left . co1 i) (Right . co1 i) a
+  co2 a = either (fmap (fmap Left) . co2) (fmap (fmap Right) . co2) a
+
+data Cofree c b where
+  Cofree :: c a => (a -> b) -> a -> Cofree c b
+instance Cotest (Cofree Cotest a) where
+  co0 (Cofree _ a) = co0 a
+  co1 i (Cofree k a) = Cofree k (co1 i a)
+  co2 (Cofree k a) = fmap (fmap (Cofree k)) (co2 a)
