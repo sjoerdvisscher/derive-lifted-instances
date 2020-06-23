@@ -124,7 +124,7 @@ isoDeriv mk un deriv = deriv {
 --     [ ([| getUnit |], apDeriv monoidDeriv)
 --     , ([| getInt  |], apDeriv idDeriv)
 --     ])
---   [t| forall f. Applicative f => Test (Rec f) |]
+--   [t| forall f. Applicative f => Num (Rec f) |]
 -- @
 --
 -- @

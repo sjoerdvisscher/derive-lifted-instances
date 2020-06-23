@@ -1,3 +1,5 @@
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -19,6 +21,7 @@ instance Test Int where
   op2 = sum . fmap sum
 
 data Rec f = Rec { getUnit :: f (), getInt :: f Int }
+deriving instance (Show (f ()), Show (f Int)) => Show (Rec f)
 deriveInstance (recordDeriv [| Rec |]
     [ ([| getUnit |], apDeriv monoidDeriv)
     , ([| getInt |], apDeriv idDeriv)
