@@ -11,6 +11,7 @@ maintainer:          sjoerd@w3future.com
 category:            Data, Generics, Development
 build-type:          Simple
 cabal-version:       2.0
+tested-with:         GHC==8.10.1, GHC==8.8.3
 
 extra-source-files:
   examples/*.hs
@@ -23,8 +24,8 @@ library
     Data.DeriveLiftedInstances.Internal
 
   build-depends:
-      base >= 4.13 && < 4.15
-    , template-haskell >= 2.15 && < 2.17
+      base >= 4.14 && < 4.15
+    , template-haskell >= 2.16 && < 2.17
     , bifunctors >= 5.5.7 && < 6
     , reflection >= 2.1 && < 3
 

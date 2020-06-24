@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
@@ -151,7 +152,11 @@ recordDeriv mk flds = Derivator {
 }
   where
     tup :: Q [Exp] -> Q Exp
+    #if __GLASGOW_HASKELL__ >= 810
     tup = fmap (TupE . fmap Just)
+    #else
+    tup = fmap TupE
+    #endif
     pat :: [Name] -> Q Pat
     pat = pure . TupP . fmap VarP
     ex :: Name -> Q Exp
