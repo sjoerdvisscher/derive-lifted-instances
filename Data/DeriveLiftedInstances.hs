@@ -152,11 +152,11 @@ recordDeriv mk flds = Derivator {
 }
   where
     tup :: Q [Exp] -> Q Exp
-    #if __GLASGOW_HASKELL__ >= 810
+#if __GLASGOW_HASKELL__ >= 810
     tup = fmap (TupE . fmap Just)
-    #else
+#else
     tup = fmap TupE
-    #endif
+#endif
     pat :: [Name] -> Q Pat
     pat = pure . TupP . fmap VarP
     ex :: Name -> Q Exp
