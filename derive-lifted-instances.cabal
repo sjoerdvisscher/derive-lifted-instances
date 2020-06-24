@@ -1,5 +1,5 @@
 name:                derive-lifted-instances
-version:             0.1
+version:             0.1.1
 synopsis:            Derive class instances though various kinds of lifting
 description:         Helper functions to use Template Haskell for generating class instances.
 homepage:            https://github.com/sjoerdvisscher/derive-lifted-instances
@@ -26,6 +26,7 @@ library
       base >= 4.13 && < 4.15
     , template-haskell >= 2.15 && < 2.17
     , bifunctors >= 5.5.7 && < 6
+    , reflection >= 2.1 && < 3
 
   default-language:
     Haskell2010

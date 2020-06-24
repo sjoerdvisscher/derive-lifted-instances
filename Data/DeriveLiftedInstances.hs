@@ -17,7 +17,7 @@ module Data.DeriveLiftedInstances (
   idDeriv, newtypeDeriv, isoDeriv,
   -- * Derivators for algebraic classes
   -- $algebraic-classes
-  recordDeriv, apDeriv, biapDeriv, monoidDeriv,
+  recordDeriv, apDeriv, biapDeriv, monoidDeriv, monoidDerivBy,
   showDeriv, ShowsPrec(..),
   -- * Creating derivators
   Derivator(..)
@@ -28,6 +28,7 @@ import Data.DeriveLiftedInstances.Internal
 import Control.Applicative (liftA2)
 import Control.Monad (zipWithM)
 import Data.Biapplicative
+import Data.Reflection
 
 -- $algebraic-classes
 -- Algebraic classes are type classes where all the methods return a value of the same type, which is also the class parameter.
@@ -75,11 +76,14 @@ biapDeriv l r = Derivator {
 -- | Create a `Derivator` for any `Monoid` @m@. This is a degenerate instance that only collects
 -- all values of type @m@, and ignores the rest.
 monoidDeriv :: Derivator
-monoidDeriv = idDeriv {
-  op  = \_ _ -> [| mempty |],
-  arg = \_ _ -> [| mempty |],
-  var = \fold v -> [| ($(fold [| foldMap |] [| id |]) $v) |],
-  ap  = \f a -> [| $f <> $a |]
+monoidDeriv = monoidDerivBy [| (<>) |] [| mempty |]
+
+monoidDerivBy :: Q Exp -> Q Exp -> Derivator
+monoidDerivBy append empty = idDeriv {
+  op  = \_ _ -> empty,
+  arg = \_ _ -> empty,
+  var = \fold v -> [| ($(fold [| foldMapBy $append $empty |] [| id |]) $v) |],
+  ap  = \f a -> [| $append $f $a |]
 }
 
 -- | Given how to derive an instance for @a@, and the names of a newtype wrapper around @a@,

@@ -38,7 +38,7 @@ deriveInstance (isoDeriv [| mkX |] [| unX |] idDeriv) [t| Ord X |]
 deriveInstance showDeriv [t| Test ShowsPrec |]
 deriveInstance monoidDeriv [t| Test () |]
 deriveInstance (apDeriv idDeriv) [t| forall a. Test a => Test [a] |]
-deriveInstance (biapDeriv idDeriv idDeriv) [t| forall a b. (Test a, Test b) => Test (a, b) |]
+-- deriveInstance (biapDeriv idDeriv idDeriv) [t| forall a b. (Test a, Test b) => Test (a, b) |]
 -- deriveInstance (newtypeDeriv 'Identity 'runIdentity idDeriv) [t| forall a. Test a => Test (Identity a) |]
 
 deriveInstance (apDeriv monoidDeriv) [t| forall a. Monoid a => Test (IO a) |]
@@ -52,6 +52,7 @@ newtype Id a = Id { runId :: a }
 deriveInstance (apDeriv (apDeriv (newtypeDeriv 'Id 'runId idDeriv))) [t| forall a. Test a => Test (() -> Identity (Id a)) |]
 deriveInstance (apDeriv (biapDeriv idDeriv idDeriv)) [t| forall a b. (Test a, Test b) => Test (() -> (a, b)) |]
 deriveInstance (biapDeriv (apDeriv idDeriv) (newtypeDeriv 'Id 'runId idDeriv)) [t| forall a b. (Test a, Test b) => Test (() -> a, Id b) |]
+deriveInstance (biapDeriv (monoidDerivBy [| (+) |] [| 0 |]) (monoidDerivBy [| (*) |] [| 1 |])) [t| Test (Int, Int) |]
 
 class Test1 f where
   hop0 :: f a
