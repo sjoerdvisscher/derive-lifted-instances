@@ -20,13 +20,6 @@ instance Test Int where
   op1 i is = i + sum is
   op2 = sum . fmap sum
 
-data Rec f = Rec { getUnit :: f (), getInt :: f Int }
-deriving instance (Show (f ()), Show (f Int)) => Show (Rec f)
-deriveInstance (recordDeriv [| Rec |]
-    [ ([| getUnit |], apDeriv monoidDeriv)
-    , ([| getInt |], apDeriv idDeriv)
-    ]) [t| forall f. Applicative f => Test (Rec f) |]
-
 newtype X = X { unX :: Int } deriving Show
 mkX :: Int -> X
 mkX = X . (`mod` 10)
@@ -34,6 +27,15 @@ deriveInstance (isoDeriv [| mkX |] [| unX |] idDeriv) [t| Num X |]
 deriveInstance (isoDeriv [| mkX |] [| unX |] idDeriv) [t| Test X |]
 deriveInstance (isoDeriv [| mkX |] [| unX |] idDeriv) [t| Eq X |]
 deriveInstance (isoDeriv [| mkX |] [| unX |] idDeriv) [t| Ord X |]
+
+data Rec f = Rec { getUnit :: f (), getInt :: f Int, getX :: f X }
+deriving instance (Show (f ()), Show (f Int), Show (f X)) => Show (Rec f)
+deriving instance (Eq (f ()), Eq (f Int), Eq (f X)) => Eq (Rec f)
+-- deriveInstance (recordDeriv [| Rec |]
+--     [ ([| getUnit |], apDeriv monoidDeriv)
+--     , ([| getInt |], apDeriv idDeriv)
+--     , ([| getX |], apDeriv (isoDeriv [| mkX |] [| unX |] idDeriv))
+--     ]) [t| forall f. (Applicative f, Foldable f, Ord (f ()), Ord (f Int), Ord (f X)) => Ord (Rec f) |]
 
 deriveInstance showDeriv [t| Test ShowsPrec |]
 deriveInstance monoidDeriv [t| Test () |]

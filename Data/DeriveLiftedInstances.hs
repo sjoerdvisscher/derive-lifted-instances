@@ -14,10 +14,7 @@
 module Data.DeriveLiftedInstances (
   -- * Deriving instances
   deriveInstance,
-  -- * Derivators for any class
   idDeriv, newtypeDeriv, isoDeriv,
-  -- * Derivators for algebraic classes
-  -- $algebraic-classes
   recordDeriv, apDeriv, biapDeriv, monoidDeriv, monoidDerivBy,
   showDeriv, ShowsPrec(..),
   -- * Creating derivators
@@ -26,14 +23,14 @@ module Data.DeriveLiftedInstances (
 
 import Language.Haskell.TH
 import Data.DeriveLiftedInstances.Internal
-import Control.Applicative (liftA2)
-import Control.Monad (zipWithM)
-import Data.Biapplicative
-import Data.Reflection
 
--- $algebraic-classes
--- Algebraic classes are type classes where all the methods return a value of the same type, which is also the class parameter.
--- Examples from base are `Num` and `Monoid`.
+import Control.Applicative (liftA2)
+
+import Data.Biapplicative
+import Data.Bifoldable
+
+import Control.Monad (zipWithM)
+import Data.Reflection
 
 -- | Given how to derive an instance for @a@, `apDeriv` creates a `Derivator` for @f a@,
 -- when @f@ is an instance of `Applicative`. Example:
@@ -46,11 +43,14 @@ import Data.Reflection
 -- @
 apDeriv :: Derivator -> Derivator
 apDeriv deriv = Derivator {
-  res = \v -> [| fmap (\w -> $(res deriv [| w |])) $v |],
+  res = \e -> [| fmap (\w -> $(res deriv [| w |])) $e |],
+  cst = \e -> [| foldMap (\w -> $(cst deriv [| w |])) $e |],
+  eff = \e -> [| traverse (\w -> $(eff deriv [| w |])) $e |],
   op  = \nm o -> [| pure $(op deriv nm o) |],
   arg = \ty e -> [| pure $(arg deriv ty e) |],
   var = \fold v ->
     [| fmap (\w -> $(var deriv fold [| w |])) ($(fold [| traverse |] [| id |]) $v) |],
+  inp = id,
   ap  = \f a -> [| liftA2 (\g b -> $(ap deriv [| g |] [| b |])) $f $a |]
 }
 
@@ -66,11 +66,14 @@ apDeriv deriv = Derivator {
 biapDeriv :: Derivator -> Derivator -> Derivator
 biapDeriv l r = Derivator {
   res = \e -> [| bimap (\w -> $(res l [| w |])) (\w -> $(res r [| w |])) $e |],
+  cst = \e -> [| bifoldMap (\w -> $(cst l [| w |])) (\w -> $(cst r [| w |])) $e |],
+  eff = \e -> [| bitraverse (\w -> $(eff l [| w |])) (\w -> $(eff r [| w |])) $e |],
   op  = \nm o -> [| bipure $(op l nm o) $(op r nm o) |],
   arg = \ty e -> [| bipure $(arg l ty e) $(arg r ty e) |],
   var = \fold v ->
     [| bimap (\w -> $(var l fold [| w |])) (\w -> $(var r fold [| w |]))
        ($(fold [| traverseBia |] [| id |]) $v) |],
+  inp = id,
   ap  = \f a -> [| biliftA2 (\g b -> $(ap l [| g |] [| b |])) (\g b -> $(ap r [| g |] [| b |])) $f $a |]
 }
 
@@ -79,8 +82,13 @@ biapDeriv l r = Derivator {
 monoidDeriv :: Derivator
 monoidDeriv = monoidDerivBy [| (<>) |] [| mempty |]
 
+-- | Create a `Derivator` for a monoid, given TH expressions to replace `(<>)` and `mempty` respectively. Example:
+--
+-- @monoidDerivBy [| (+) |] [| 0 |]@
 monoidDerivBy :: Q Exp -> Q Exp -> Derivator
 monoidDerivBy append empty = idDeriv {
+  cst = const [| mempty |],
+  eff = \e -> [| pure $e |],
   op  = \_ _ -> empty,
   arg = \_ _ -> empty,
   var = \fold v -> [| ($(fold [| foldMapBy $append $empty |] [| id |]) $v) |],
@@ -141,10 +149,13 @@ isoDeriv mk un deriv = deriv {
 -- @
 recordDeriv :: Q Exp -> [(Q Exp, Derivator)] -> Derivator
 recordDeriv mk flds = Derivator {
-  res = \vs -> do vnms <- vars; [| case $vs of $(pat vnms) -> $(exps vnms >>= foldl (\f v -> [| $f $(pure v) |]) mk) |],
+  res = \vs -> do vnms <- vars; [| case $vs of $(pat vnms) -> $(foldl (\f ((_, d), v) -> [| $f $(res d (ex v)) |]) mk (zip flds vnms)) |],
+  cst = \vs -> do vnms <- vars; [| case $vs of $(pat vnms) -> $(foldl (\f ((_, d), v) -> [| $f <> $(cst d (ex v)) |]) [| mempty |] (zip flds vnms)) |],
+  eff = \vs -> do vnms <- vars; [| case $vs of $(pat vnms) -> $(foldl (\f ((_, d), v) -> [| $f <*> $(eff d (ex v)) |]) [| pure $mk |] (zip flds vnms)) |],
   op  = \nm o -> tup $ traverse (\(_, d) -> op d nm o) flds,
   arg = \ty e -> tup $ traverse (\(_, d) -> arg d ty e) flds,
   var = \fold v -> tup $ traverse (\(fld, d) -> var d fold [| $(fold [| fmap |] fld) $v |]) flds,
+  inp = id,
   ap  = \fs as -> do
     fnms <- funs
     vnms <- vars
@@ -161,8 +172,6 @@ recordDeriv mk flds = Derivator {
     pat = pure . TupP . fmap VarP
     ex :: Name -> Q Exp
     ex = pure . VarE
-    exps :: [Name] -> Q [Exp]
-    exps = traverse ex
     vars :: Q [Name]
     vars = names "a"
     funs :: Q [Name]
