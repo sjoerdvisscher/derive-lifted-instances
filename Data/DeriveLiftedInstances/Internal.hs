@@ -93,11 +93,11 @@ deriveInstance deriv qtyp = do
 deriveInstance' :: Derivator -> Cxt -> Name -> Type -> Q [Dec]
 deriveInstance' deriv ctx clsName typ = do
   ClassI (ClassD _ _ tvs _ decs) _ <- reify clsName
-  #if MIN_VERSION_template_haskell(2,17,0)
+#if MIN_VERSION_template_haskell(2,17,0)
   let KindedTV tvn _ _ = last tvs
-  #else
+#else
   let KindedTV tvn _ = last tvs
-  #endif
+#endif
   impl <- for decs $ \case
     SigD nm tp -> do
       dec <- reify nm
