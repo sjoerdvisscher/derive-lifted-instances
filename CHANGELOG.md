@@ -1,6 +1,10 @@
 Changelog
 =========
 
+v0.2.1 2020-10-03
+-----------------
+  - Support GHC 9.0
+
 v0.2   2020-06-29
 -----------------
   - Support deriving co- and dialgebraic classes with `cst` and `eff`
