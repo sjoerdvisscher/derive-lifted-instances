@@ -11,7 +11,7 @@ maintainer:          sjoerd@w3future.com
 category:            Data, Generics, Development
 build-type:          Simple
 cabal-version:       2.0
-tested-with:         GHC==9.0.0.20200925, GHC==8.10.1, GHC==8.8.3
+tested-with:         GHC==9.0.1, GHC==8.10.4, GHC==8.8.4
 
 extra-source-files:
   examples/*.hs

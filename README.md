@@ -1,8 +1,7 @@
 derive-lifted-instances
 =======================
 
-[![Hackage](https://img.shields.io/hackage/v/derive-lifted-instances.svg)](https://hackage.haskell.org/package/derive-lifted-instances)
-[![Build Status](https://travis-ci.org/sjoerdvisscher/derive-lifted-instances.svg?branch=master)](https://travis-ci.org/github/sjoerdvisscher/derive-lifted-instances)
+[![Hackage](https://img.shields.io/hackage/v/derive-lifted-instances.svg)](https://hackage.haskell.org/package/derive-lifted-instances) [![Build Status](https://github.com/sjoerdvisscher/derive-lifted-instances/workflows/Haskell-CI/badge.svg)](https://github.com/sjoerdvisscher/derive-lifted-instances/actions?query=workflow%3AHaskell-CI)
 
 `derive-lifted-instances` generates type class instances using Template Haskell.
 
