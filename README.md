@@ -27,7 +27,7 @@ Below is an overview of what this library can do. If you could rewrite a class a
 |              | `class C x where dialg :: f x -> g x`
 |--------------|---
 | `x` iso `y`  | `(Functor f, Functor g, C y)`
-| `x=m`        | `(Foldable f, Porinted g, Monoid m)`
+| `x=m`        | `(Foldable f, Pointed g, Monoid m)`
 | `x=t a`      | `(Traversable f, Applicative g, Applicative t, Traversable t, C a)`
 | `x=t a b`    | `(Traversable f, Applicative g, Biapplicative t, Bitraversable t, C a, C b)`
 | `x` a record | `(Traversable f, Applicative g, All C flds)`
