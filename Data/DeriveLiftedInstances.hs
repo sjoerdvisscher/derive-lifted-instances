@@ -1,7 +1,7 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE TemplateHaskell #-}
-{-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# OPTIONS_GHC -fno-warn-orphans -Wno-noncanonical-monoid-instances #-}
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  Data.DeriveLiftedInstances
@@ -23,8 +23,6 @@ module Data.DeriveLiftedInstances (
 
 import Language.Haskell.TH
 import Data.DeriveLiftedInstances.Internal
-
-import Control.Applicative (liftA2)
 
 import Data.Biapplicative
 import Data.Bifoldable

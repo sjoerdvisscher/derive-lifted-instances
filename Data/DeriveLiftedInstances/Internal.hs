@@ -18,7 +18,10 @@
 module Data.DeriveLiftedInstances.Internal where
 
 import Language.Haskell.TH
-import Language.Haskell.TH.Syntax (Lift)
+#if MIN_VERSION_template_haskell(2,23,0)
+#else
+import Language.Haskell.TH.Syntax
+#endif
 import Data.Char (isAlpha)
 import Data.Data (Data, gmapQl, cast)
 import Data.Maybe (fromMaybe, catMaybes)
@@ -93,11 +96,7 @@ deriveInstance deriv qtyp = do
 deriveInstance' :: Derivator -> Cxt -> Name -> Type -> Q [Dec]
 deriveInstance' deriv ctx clsName typ = do
   ClassI (ClassD _ _ tvs _ decs) _ <- reify clsName
-#if MIN_VERSION_template_haskell(2,17,0)
-  let KindedTV tvn _ _ = last tvs
-#else
-  let KindedTV tvn _ = last tvs
-#endif
+  let tvn = tyVarName (last tvs)
   impl <- for decs $ \case
     SigD nm tp -> do
       dec <- reify nm
@@ -109,6 +108,16 @@ deriveInstance' deriv ctx clsName typ = do
         _ -> fail $ "No support for declaration: " ++ show dec
     _ -> pure Nothing
   pure [InstanceD Nothing ctx typ $ catMaybes impl]
+
+#if MIN_VERSION_template_haskell(2,17,0)
+tyVarName :: TyVarBndr s -> Name
+tyVarName (PlainTV n _) = n
+tyVarName (KindedTV n _ _) = n
+#else
+tyVarName :: TyVarBndr -> Name
+tyVarName (PlainTV n) = n
+tyVarName (KindedTV n _) = n
+#endif
 
 buildOperation :: Derivator -> Name -> Type -> Q Exp -> Q ([Name], Exp)
 buildOperation d nm (AppT (AppT ArrowT h) t) e | hasVar nm h = do
@@ -148,8 +157,11 @@ contains :: Data d => Name -> d -> Bool
 contains nm = gmapQl (||) False (\d -> maybe (contains nm d) (== nm) $ cast d)
 
 
+#if MIN_VERSION_template_haskell(2,23,0)
+#else
 deriving instance Lift Fixity
 deriving instance Lift FixityDirection
+#endif
 
 -- | Helper for showing infix expressions
 data ShowsPrec = ShowsPrec (Int -> String -> String) | ShowOp2 Fixity (Int -> String -> String) | ShowOp1 Fixity (Int -> String -> String)

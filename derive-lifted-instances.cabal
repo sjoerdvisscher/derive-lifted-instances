@@ -1,5 +1,5 @@
 name:                derive-lifted-instances
-version:             0.2.2
+version:             0.3
 synopsis:            Derive class instances though various kinds of lifting
 description:         Helper functions to use Template Haskell for generating class instances.
 homepage:            https://github.com/sjoerdvisscher/derive-lifted-instances
@@ -11,10 +11,12 @@ maintainer:          sjoerd@w3future.com
 category:            Data, Generics, Development
 build-type:          Simple
 cabal-version:       2.0
-tested-with:         GHC==9.0.1, GHC==8.10.4, GHC==8.8.4
+tested-with:         GHC==9.6.7, GHC==9.8.4, GHC==9.10.3, GHC==9.12.2, GHC==9.14.1
 
 extra-source-files:
   examples/*.hs
+
+extra-doc-files:
   README.md
   CHANGELOG.md
 
@@ -24,8 +26,8 @@ library
     Data.DeriveLiftedInstances.Internal
 
   build-depends:
-      base >= 4.13 && < 4.16
-    , template-haskell >= 2.15 && < 2.18
+      base >= 4.18 && < 4.23
+    , template-haskell >= 2.20 && < 2.25
     , bifunctors >= 5.5.7 && < 6
     , reflection >= 2.1 && < 3
 
@@ -34,4 +36,4 @@ library
 
 source-repository head
   type:     git
-  location: git://github.com/sjoerdvisscher/derive-lifted-instances.git
+  location: https://github.com/sjoerdvisscher/derive-lifted-instances
